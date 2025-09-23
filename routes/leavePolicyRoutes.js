@@ -1,17 +1,18 @@
-const express = require("express");
-const router = express.Router();
-const {
+import express from "express";
+import {
   getLeavePolicies,
   getLeavePolicyByRole,
   addLeavePolicy,
   updateLeavePolicy,
   deleteLeavePolicy
-} = require("../controllers/leavePolicyController");
+} from "../controllers/leavePolicyController.js";
+
+const router = express.Router();
 
 // ✅ Get all leave policies
 router.get("/", getLeavePolicies);
 
-// ✅ Get leave policy by role (changed route to avoid conflicts)
+// ✅ Get leave policy by role
 router.get("/role/:roleId", getLeavePolicyByRole);
 
 // ✅ Add new leave policy
@@ -23,4 +24,4 @@ router.put("/:policyId", updateLeavePolicy);
 // ✅ Delete leave policy
 router.delete("/:policyId", deleteLeavePolicy);
 
-module.exports = router;
+export default router;

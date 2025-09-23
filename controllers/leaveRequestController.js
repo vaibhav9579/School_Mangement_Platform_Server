@@ -1,9 +1,9 @@
-// const pool = require("../config/db");
-const pool = require("../db");
-
+// controllers/leaveRequestController.js
+import pool from "../db.js";
 
 // ✅ Apply Leave with Role-wise Policy Check
-exports.applyLeave = async (req, res) => {
+// ✅ Apply Leave with Role-wise Policy Check
+export const applyLeave = async (req, res) => {
   try {
     const { user_id, leave_type, days_requested, start_date, end_date } = req.body;
 
@@ -12,14 +12,11 @@ exports.applyLeave = async (req, res) => {
     }
 
     // 1. Get user role_id
-    const userResult = await pool.query(
-      "SELECT role_id FROM users WHERE id = $1",
-      [user_id]
-    );
+    const userResult = await pool.query("SELECT role FROM users WHERE id = $1", [user_id]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    const role_id = userResult.rows[0].role_id;
+    const role_id = userResult.rows[0].role;
 
     // 2. Get allowed days for this role + leave type
     const policyResult = await pool.query(
@@ -33,8 +30,8 @@ exports.applyLeave = async (req, res) => {
 
     // 3. Calculate already taken approved leaves
     const takenResult = await pool.query(
-      `SELECT COALESCE(SUM(days_requested), 0) as taken 
-       FROM leave_requests 
+      `SELECT COALESCE(SUM(days), 0) as taken
+       FROM leave_requests
        WHERE user_id = $1 AND leave_type = $2 AND status = 'approved'`,
       [user_id, leave_type]
     );
@@ -44,17 +41,19 @@ exports.applyLeave = async (req, res) => {
     const available = allowed_days - taken;
 
     let status = "pending"; // default status
+    let is_loss_of_pay = false;
     if (days_requested > available) {
-      status = "loss_of_pay"; // mark as LOP
+      status = "loss_of_pay";
+      is_loss_of_pay = true;
     }
 
     // 5. Insert leave request
     const result = await pool.query(
-      `INSERT INTO leave_requests 
-       (user_id, leave_type, days_requested, start_date, end_date, status) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
+      `INSERT INTO leave_requests
+       (user_id, leave_type, days, start_date, end_date, status, is_loss_of_pay)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [user_id, leave_type, days_requested, start_date, end_date, status]
+      [user_id, leave_type, days_requested, start_date, end_date, status, is_loss_of_pay]
     );
 
     res.status(201).json({
@@ -63,33 +62,31 @@ exports.applyLeave = async (req, res) => {
       available_before: available,
       available_after: Math.max(0, available - days_requested),
     });
-
   } catch (err) {
+    console.error("Error applying leave:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
 // ✅ Get all requests by a specific user
-exports.getLeaveRequestsByUser = async (req, res) => {
+export const getLeaveRequestsByUser = async (req, res) => {
   try {
     const { userId } = req.params;
+
     const result = await pool.query(
       "SELECT * FROM leave_requests WHERE user_id = $1 ORDER BY start_date DESC",
       [userId]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "No leave requests found for this user" });
-    }
-
     res.json(result.rows);
   } catch (err) {
+    console.error("Error fetching user leave requests:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
 // ✅ Approver updates request status
-exports.updateLeaveStatus = async (req, res) => {
+export const updateLeaveStatus = async (req, res) => {
   try {
     const { requestId } = req.params;
     const { status } = req.body;
@@ -107,26 +104,26 @@ exports.updateLeaveStatus = async (req, res) => {
       return res.status(404).json({ message: "Leave request not found" });
     }
 
-    res.json(result.rows[0]);
+    res.json({
+      message: "Leave status updated successfully",
+      leave: result.rows[0],
+    });
   } catch (err) {
+    console.error("Error updating leave status:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
 // ✅ Get leave balance for a user
-exports.getLeaveBalance = async (req, res) => {
+export const getLeaveBalance = async (req, res) => {
   try {
     const { userId } = req.params;
 
     // Get user's role
-    const userResult = await pool.query(
-      "SELECT role_id FROM users WHERE id = $1",
-      [userId]
-    );
+    const userResult = await pool.query("SELECT role_id FROM users WHERE id = $1", [userId]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-
     const roleId = userResult.rows[0].role_id;
 
     // Get policies for that role
@@ -135,16 +132,12 @@ exports.getLeaveBalance = async (req, res) => {
       [roleId]
     );
 
-    if (policyResult.rows.length === 0) {
-      return res.status(404).json({ message: "No leave policies found for this role" });
-    }
-
     let balances = [];
 
     for (let policy of policyResult.rows) {
       const takenResult = await pool.query(
-        `SELECT COALESCE(SUM(days_requested), 0) as taken 
-         FROM leave_requests 
+        `SELECT COALESCE(SUM(days_requested), 0) as taken
+         FROM leave_requests
          WHERE user_id = $1 AND leave_type = $2 AND status = 'approved'`,
         [userId, policy.leave_type]
       );
@@ -162,26 +155,24 @@ exports.getLeaveBalance = async (req, res) => {
 
     res.json(balances);
   } catch (err) {
+    console.error("Error fetching leave balance:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
 // ✅ Admin/Approver: Get all leave requests
-exports.getAllLeaveRequests = async (req, res) => {
+export const getAllLeaveRequests = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT lr.*, u.name, u.role_id 
-       FROM leave_requests lr 
-       JOIN users u ON lr.user_id = u.id 
+      `SELECT lr.*, u.name, u.role_id
+       FROM leave_requests lr
+       JOIN users u ON lr.user_id = u.id
        ORDER BY lr.start_date DESC`
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "No leave requests found" });
-    }
-
     res.json(result.rows);
   } catch (err) {
+    console.error("Error fetching all leave requests:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
