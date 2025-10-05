@@ -12,6 +12,15 @@ import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
 import academicRoutes from './routes/academicRoutes.js';
+import markRoutes from "./routes/markRoute.js";
+// import subjectsRouter from './routes/subj
+// ects.js'; 
+import subjectRoutes from "./routes/subjects.js";
+import inwardRoutes from "./routes/inwordRoute.js"
+import outwardRoutes from "./routes/outworRoute.js";
+import timeSlotRoutes from "./routes/timeSlotRoutes.js";
+import assignmentRoutes from "./routes/assignmentRoutes.js";
+import timetableRoutes from "./routes/timetableRoutes.js";
 
 dotenv.config();
 const { Pool } = pkg;
@@ -22,13 +31,26 @@ app.use(bodyParser.json());
 app.use("/api/policies", leavePolicyRoutes);
 app.use("/api/requests", leaveRequestRoutes);
 
+// marks 
+app.use("/api/marks", markRoutes);
+app.use('/api/inward', inwardRoutes);
+
+app.use('/api/outward', outwardRoutes);
+
+app.use('/api/time-slots', timeSlotRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/timetable', timetableRoutes);
+
+// for subjects 
+// app.use('/api/subjects', subjectsRouter);
+
+app.use("/api/subjects", subjectRoutes);
 
 // health
 app.get('/health', (req,res)=>res.json({ok:true}));
 
 // academic routes
 app.use('/api/academic', academicRoutes);
-
 
 
 // PostgreSQL connection
@@ -52,11 +74,10 @@ app.post("/login", async (req, res) => {
     }
 
     const user = result.rows[0];
-    console.log("**** User fetched from DB:", user);
+    // console.log("**** User fetched from DB:", user);
 
     // Compare hash
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log("isMatch:", isMatch);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
@@ -179,7 +200,7 @@ app.delete("/users/:id", async (req, res) => {
 // ✅ Fetch all classes
 app.get("/classes", async (req, res) => {
   try {
-    const result = await pool.query("SELECT id, classname, classteacher FROM classes ORDER BY id ASC");
+    const result = await pool.query("SELECT id, classname, classteacher FROM old_classes ORDER BY id ASC");
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch classes error:", err.message);
@@ -191,7 +212,7 @@ app.get("/classes", async (req, res) => {
 app.get("/classes/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query("SELECT id, classname, classteacher FROM classes WHERE id = $1", [id]);
+    const result = await pool.query("SELECT id, classname, classteacher FROM old_classes WHERE id = $1", [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Class not found" });
     }
@@ -205,9 +226,10 @@ app.get("/classes/:id", async (req, res) => {
 // ✅ Add new class
 app.post("/classes", async (req, res) => {
   const { classname, classteacher } = req.body;
+  console.log("req.body", req.body);
   try {
     const result = await pool.query(
-      "INSERT INTO classes (classname, classteacher) VALUES ($1, $2) RETURNING id, classname, classteacher",
+      "INSERT INTO old_classes (classname, classteacher) VALUES ($1, $2) RETURNING id, classname, classteacher",
       [classname, classteacher]
     );
     res.json(result.rows[0]);
@@ -223,7 +245,7 @@ app.put("/classes/:id", async (req, res) => {
   const { classname, classteacher } = req.body;
   try {
     const result = await pool.query(
-      "UPDATE classes SET classname = $1, classteacher = $2 WHERE id = $3 RETURNING id, classname, classteacher",
+      "UPDATE old_classes SET classname = $1, classteacher = $2 WHERE id = $3 RETURNING id, classname, classteacher",
       [classname, classteacher, id]
     );
     if (result.rows.length === 0) {
@@ -240,7 +262,7 @@ app.put("/classes/:id", async (req, res) => {
 app.delete("/classes/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query("DELETE FROM classes WHERE id = $1 RETURNING id", [id]);
+    const result = await pool.query("DELETE FROM old_classes WHERE id = $1 RETURNING id", [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Class not found" });
     }
@@ -383,6 +405,7 @@ app.put('/roles/:id', async (req, res) => {
 // ✅ Delete role
 app.delete('/roles/:id', async (req, res) => {
   const id = parseInt(req.params.id);
+  console.log("id is getting", id);
   try {
     const result = await pool.query('DELETE FROM roles WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length) {
@@ -396,9 +419,7 @@ app.delete('/roles/:id', async (req, res) => {
   }
 });
 
-
 // for admission module start
-
 // Upload folder
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
@@ -411,16 +432,15 @@ const storage = multer.diskStorage({
     const base = path.basename(file.originalname, ext).replace(/\s+/g, "_");
     const name = `${Date.now()}_${base}${ext}`;
     cb(null, name);
-  }
+  } 
 });
 const upload = multer({ storage });
-
 
 // Helper: generate admission no (simple)
 function generateAdmissionNo() {
   const year = new Date().getFullYear();
   const r = Math.floor(1000 + Math.random() * 9000);
-  return `ADM-${year}-${r}`;
+  return `CC-${year}-${r}`;
 }
 
 /**
@@ -644,7 +664,27 @@ app.delete("/api/documents/:docId", async (req, res) => {
   }
 });
 
+// ✅ Get admissions by class_id
+app.get("/api/admissions/class/:classId", async (req, res) => {
+  try {
+    const { classId } = req.params;
 
+    // Query all admissions for given class_id
+    const result = await pool.query(
+      `SELECT * FROM admissions WHERE class_id = $1 ORDER BY created_at DESC`,
+      [classId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "No admissions found for this class" });
+    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/admissions/class/:classId error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 const PORT = 5000;
 app.listen(PORT, () => {

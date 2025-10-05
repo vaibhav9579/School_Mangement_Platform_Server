@@ -42,6 +42,7 @@ export async function listDepartments(req, res) {
     res.json(q.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function createDepartment(req, res) {
   try {
     const { institution_id, name } = req.body;
@@ -49,6 +50,7 @@ export async function createDepartment(req, res) {
     res.status(201).json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function updateDepartment(req, res) {
   try {
     const { id } = req.params;
@@ -57,6 +59,7 @@ export async function updateDepartment(req, res) {
     res.json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function deleteDepartment(req, res) {
   try {
     const { id } = req.params;
@@ -75,6 +78,7 @@ export async function listPrograms(req, res) {
     res.json(q.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function createProgram(req, res) {
   try {
     const { department_id, name } = req.body;
@@ -82,6 +86,7 @@ export async function createProgram(req, res) {
     res.status(201).json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function updateProgram(req, res) {
   try {
     const { id } = req.params;
@@ -90,6 +95,7 @@ export async function updateProgram(req, res) {
     res.json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function deleteProgram(req, res) {
   try {
     const { id } = req.params;
@@ -109,21 +115,70 @@ export async function listClasses(req, res) {
     res.json(q.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
-export async function createClass(req, res) {
+
+export async function getClassbyId(req, res) {
+  console.log("GetClass by id is executing");
   try {
-    const { institution_id, program_id, name } = req.body;
-    const q = await pool.query('INSERT INTO classes (institution_id,program_id,name) VALUES ($1,$2,$3) RETURNING *', [institution_id, program_id || null, name]);
+    const {id} = req.params;
+    const result = await pool.query(`Select * from classes where classteacher = $1`, [id]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: err.message })
+  }
+}
+
+
+
+export async function createClass(req, res) {
+  console.log("req.body", req.body);
+  try {
+    const { institution_id, program_id, name, classteacher } = req.body;
+    const q = await pool.query('INSERT INTO classes (institution_id,program_id,name, classteacher) VALUES ($1,$2,$3,$4) RETURNING *', [institution_id, program_id || null, name, classteacher || null]);
     res.status(201).json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
+// export async function updateClass(req, res) {
+//   console.log("req.params.", req.params);
+//   console.log("req.body", req.body);
+//   try {
+//     const { id } = req.params;
+//     const { name } = req.body;
+//     const q = await pool.query('UPDATE classes SET name=$1 WHERE id=$2 RETURNING *', [name, id]);
+//     res.json(q.rows[0]);
+//   } catch (e) { res.status(500).json({ error: e.message }); }
+// }
+
 export async function updateClass(req, res) {
+
   try {
     const { id } = req.params;
-    const { name } = req.body;
-    const q = await pool.query('UPDATE classes SET name=$1 WHERE id=$2 RETURNING *', [name, id]);
+    const { name, classteacher, program_id } = req.body;
+
+    // Dynamically build query
+    const fields = [];
+    const values = [];
+    let i = 1;
+
+    if (name !== undefined) { fields.push(`name=$${i++}`); values.push(name); }
+    if (classteacher !== undefined) { fields.push(`classteacher=$${i++}`); values.push(classteacher); }
+    if (program_id !== undefined) { fields.push(`program_id=$${i++}`); values.push(program_id); }
+
+    if (fields.length === 0)
+      return res.status(400).json({ error: "No fields to update" });
+
+    values.push(id);
+    const q = await pool.query(`UPDATE classes SET ${fields.join(', ')} WHERE id=$${i} RETURNING *`, values);
+
+    if (q.rows.length === 0)
+      return res.status(404).json({ error: "Class not found" });
+
     res.json(q.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 }
+
 export async function deleteClass(req, res) {
   try {
     const { id } = req.params;
@@ -140,6 +195,7 @@ export async function listSections(req, res) {
     res.json(q.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function createSection(req, res) {
   try {
     const { class_id, name } = req.body;
@@ -147,6 +203,7 @@ export async function createSection(req, res) {
     res.status(201).json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function updateSection(req, res) {
   try {
     const { id } = req.params;
@@ -155,6 +212,7 @@ export async function updateSection(req, res) {
     res.json(q.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
+
 export async function deleteSection(req, res) {
   try {
     const { id } = req.params;

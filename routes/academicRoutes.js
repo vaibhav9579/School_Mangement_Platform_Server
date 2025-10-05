@@ -23,6 +23,7 @@ router.delete('/programs/:id', ctrl.deleteProgram);
 
 // classes
 router.get('/classes', ctrl.listClasses);
+router.get('/classes/:id', ctrl.getClassbyId);
 router.post('/classes', ctrl.createClass);
 router.put('/classes/:id', ctrl.updateClass);
 router.delete('/classes/:id', ctrl.deleteClass);
