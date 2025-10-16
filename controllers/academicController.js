@@ -125,9 +125,7 @@ export async function getClassbyId(req, res) {
   } catch (err) {
     res.status(500).json({ erro: err.message })
   }
-}
-
-
+} 
 
 export async function createClass(req, res) {
   console.log("req.body", req.body);

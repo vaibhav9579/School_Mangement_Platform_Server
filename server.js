@@ -21,6 +21,7 @@ import outwardRoutes from "./routes/outworRoute.js";
 import timeSlotRoutes from "./routes/timeSlotRoutes.js";
 import assignmentRoutes from "./routes/assignmentRoutes.js";
 import timetableRoutes from "./routes/timetableRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoute.js";
 
 dotenv.config();
 const { Pool } = pkg;
@@ -52,6 +53,9 @@ app.get('/health', (req,res)=>res.json({ok:true}));
 // academic routes
 app.use('/api/academic', academicRoutes);
 
+
+// attendance routes
+app.use("/api/attendance", attendanceRoutes);
 
 // PostgreSQL connection
 const pool = new Pool({
